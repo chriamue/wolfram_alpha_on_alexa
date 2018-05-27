@@ -10,23 +10,30 @@ const WOLFRAM_APP_ID = process.env.WOLFRAM_APP_ID;
 
 const wolfram = require('wolfram-alpha').createClient(WOLFRAM_APP_ID);
 
-function* Ask(query, callback) {
+var Ask = async function (query, responseBuilder) {
   var name = 'Wolfram alpha asked question';
-  var description = '' + query;
-  var speechText = ''
-  console.log(query);
-  var result = yield wolfram.query(query);
-  if (Array.isArray(result)) {
-    var answer = result[1].subpods[0].text
-    speechText = speechText + answer
-    description = query + ' : ' + answer;
-    console.log(speechText)
-  }
 
-  return callback
-    .speak(speechText)
-    .withSimpleCard('wolfram alpha', speechText)
-    .getResponse();
+  console.log(query);
+  let resp = await wolfram.query(query).then(function (result) {
+    console.log(result)
+    var speechText = ''
+    
+    if (Array.isArray(result)) {
+      var answer = result[1].subpods[0].text
+      speechText = answer
+    }
+    var description = query + ': ' + speechText;
+    return responseBuilder
+      .speak(speechText)
+      .withSimpleCard('wolfram alpha', description)
+      .getResponse();
+  }).catch(function (e) {
+    return responseBuilder
+      .speak(e)
+      .withSimpleCard('wolfram alpha', e)
+      .getResponse();
+  });
+  return resp;
 }
 
 const LaunchRequestHandler = {
@@ -49,12 +56,19 @@ const AskIntentHandler = {
     return handlerInput.requestEnvelope.request.type === 'IntentRequest'
       && handlerInput.requestEnvelope.request.intent.name === 'AskIntent';
   },
-  handle(handlerInput) {
+  async handle(handlerInput) {
     const request = handlerInput.requestEnvelope.request;
     const responseBuilder = handlerInput.responseBuilder;
 
     var query = request.intent.slots.Query.value
-    co(Ask(query, responseBuilder))
+    return await Ask(query, responseBuilder).then(function (resp) {
+      return resp;
+    }).catch(function (e) {
+      return handlerInput.responseBuilder
+        .speak('unknown error')
+        .withSimpleCard('error in wolfram alpha', e)
+        .getResponse();
+    });
   }
 };
 
